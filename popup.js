@@ -62,6 +62,7 @@ const roundNumber = $("#roundNumber");
 
 let currentMode = "classic"; // "classic" or "multi-agent"
 let rosterOrder = []; // current roster IDs in order
+let activeTabId = null; // track which tab the popup is talking to
 
 // ── Tab switching (classic mode Builder/Critic) ──
 
@@ -343,8 +344,10 @@ function getFirstAgentDisplay() {
 
 // ── Status updates from content script ──
 
-chrome.runtime.onMessage.addListener((msg) => {
+chrome.runtime.onMessage.addListener((msg, sender) => {
   if (msg.type === "STATUS_UPDATE") {
+    // Only accept updates from the tab this popup is talking to
+    if (activeTabId && sender.tab?.id !== activeTabId) return;
     updateStatusUI(msg.status);
     messagesSent.textContent = msg.messagesSent || 0;
 
@@ -428,6 +431,7 @@ function refreshStatus() {
 function sendToContentScript(message, callback) {
   chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
     if (tabs[0]?.id) {
+      activeTabId = tabs[0].id;
       chrome.tabs.sendMessage(tabs[0].id, message, (response) => {
         if (callback) callback(response);
       });
