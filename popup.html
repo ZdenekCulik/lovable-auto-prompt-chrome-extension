@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>Lovable Auto-Prompter</h1>
+      <div class="status-row">
+        <span id="statusDot" class="status-dot off"></span>
+        <span id="statusText">Paused</span>
+      </div>
+    </div>
+
+    <div class="toggle-section">
+      <label class="toggle">
+        <input type="checkbox" id="enableToggle">
+        <span class="slider"></span>
+      </label>
+      <span class="toggle-label" id="toggleLabel">OFF</span>
+    </div>
+
+    <div class="stats">
+      <div class="stat">
+        <span class="stat-value" id="messagesSent">0</span>
+        <span class="stat-label">Messages Sent</span>
+      </div>
+      <div class="stat">
+        <span class="stat-value" id="loopNumber">1</span>
+        <span class="stat-label">Loop #</span>
+      </div>
+      <div class="stat">
+        <span class="stat-value" id="nextRole">B</span>
+        <span class="stat-label">Next</span>
+      </div>
+    </div>
+
+    <div class="section">
+      <label class="section-label">Delay after AI finishes (seconds)</label>
+      <div class="delay-row">
+        <input type="range" id="delaySlider" min="2" max="30" value="5">
+        <span id="delayValue" class="delay-value">5s</span>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="tabs">
+        <button class="tab active" data-tab="builder">Builder</button>
+        <button class="tab" data-tab="critic">Critic</button>
+      </div>
+      <textarea id="builderArea" rows="8" spellcheck="false" class="prompt-area"></textarea>
+      <textarea id="criticArea" rows="8" spellcheck="false" class="prompt-area" style="display:none"></textarea>
+    </div>
+
+    <div class="section">
+      <label class="challenge-row">
+        <input type="checkbox" id="challengeToggle" checked>
+        <span class="challenge-label">Inject challenge every 5 loops</span>
+      </label>
+    </div>
+
+    <div class="actions">
+      <button id="saveBtn" class="btn primary">Save Prompts</button>
+      <button id="sendNowBtn" class="btn">Send Now</button>
+      <button id="resetBtn" class="btn danger">Reset</button>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

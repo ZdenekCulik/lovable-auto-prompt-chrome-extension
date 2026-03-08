@@ -1,0 +1,278 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  width: 380px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: #1a1a2e;
+  color: #e0e0e0;
+}
+
+.container {
+  padding: 16px;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+h1 {
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+}
+
+.status-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.status-dot.off { background: #666; }
+.status-dot.waiting { background: #f0a030; animation: pulse 2s infinite; }
+.status-dot.sending { background: #30d030; animation: pulse 0.5s infinite; }
+.status-dot.paused { background: #666; }
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+/* Toggle */
+.toggle-section {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 12px;
+  background: #16213e;
+  border-radius: 8px;
+}
+
+.toggle {
+  position: relative;
+  width: 50px;
+  height: 26px;
+}
+
+.toggle input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  inset: 0;
+  background: #444;
+  border-radius: 26px;
+  cursor: pointer;
+  transition: background 0.3s;
+}
+
+.slider::before {
+  content: "";
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  left: 3px;
+  bottom: 3px;
+  background: #fff;
+  border-radius: 50%;
+  transition: transform 0.3s;
+}
+
+.toggle input:checked + .slider {
+  background: #6c5ce7;
+}
+
+.toggle input:checked + .slider::before {
+  transform: translateX(24px);
+}
+
+.toggle-label {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* Stats */
+.stats {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.stat {
+  flex: 1;
+  background: #16213e;
+  border-radius: 8px;
+  padding: 10px;
+  text-align: center;
+}
+
+.stat-value {
+  display: block;
+  font-size: 20px;
+  font-weight: 700;
+  color: #6c5ce7;
+}
+
+.stat-label {
+  font-size: 10px;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Sections */
+.section {
+  margin-bottom: 12px;
+}
+
+.section-label {
+  display: block;
+  font-size: 11px;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 6px;
+}
+
+.delay-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+input[type="range"] {
+  flex: 1;
+  accent-color: #6c5ce7;
+  height: 4px;
+}
+
+.delay-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: #6c5ce7;
+  min-width: 30px;
+}
+
+/* Tabs */
+.tabs {
+  display: flex;
+  gap: 2px;
+  margin-bottom: 6px;
+}
+
+.tab {
+  flex: 1;
+  padding: 6px 12px;
+  border: none;
+  border-radius: 6px 6px 0 0;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  background: #2a2a4a;
+  color: #888;
+  transition: all 0.2s;
+}
+
+.tab:hover {
+  color: #e0e0e0;
+}
+
+.tab.active {
+  background: #16213e;
+  color: #fff;
+}
+
+.tab.active[data-tab="builder"] {
+  border-top: 2px solid #30d030;
+}
+
+.tab.active[data-tab="critic"] {
+  border-top: 2px solid #ff6b6b;
+}
+
+textarea.prompt-area {
+  width: 100%;
+  background: #16213e;
+  border: 1px solid #2a2a4a;
+  border-radius: 0 0 6px 6px;
+  color: #e0e0e0;
+  padding: 8px;
+  font-size: 11px;
+  font-family: inherit;
+  resize: vertical;
+  line-height: 1.5;
+}
+
+textarea.prompt-area:focus {
+  outline: none;
+  border-color: #6c5ce7;
+}
+
+/* Challenge toggle */
+.challenge-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 12px;
+  color: #aaa;
+}
+
+.challenge-row input[type="checkbox"] {
+  accent-color: #6c5ce7;
+  width: 14px;
+  height: 14px;
+}
+
+.challenge-label {
+  font-size: 12px;
+}
+
+/* Buttons */
+.actions {
+  display: flex;
+  gap: 6px;
+}
+
+.btn {
+  flex: 1;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  background: #2a2a4a;
+  color: #e0e0e0;
+  transition: background 0.2s;
+}
+
+.btn:hover { background: #3a3a5a; }
+
+.btn.primary {
+  background: #6c5ce7;
+  color: #fff;
+}
+
+.btn.primary:hover { background: #5b4bd5; }
+
+.btn.danger { color: #ff6b6b; }
+.btn.danger:hover { background: #3a2020; }
