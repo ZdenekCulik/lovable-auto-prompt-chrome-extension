@@ -45,7 +45,8 @@ You decide what will be the best approach — implement the most impactful fix o
 
   const DEFAULT_DELAY = 5;
   const MIN_AI_WORK_TIME = 10000;
-  const CHALLENGE_EVERY_N_LOOPS = 5; // inject challenge every 5 full loops (10 messages)
+  const CHALLENGE_EVERY_N_LOOPS = 5; // inject challenge every 5 full loops (classic) or 3 rounds (multi-agent)
+  const CHALLENGE_EVERY_N_ROUNDS = 3; // for multi-agent mode
 
   const SEND_ARROW_PREFIX = "M11 19V7";
 
@@ -58,7 +59,38 @@ You decide what will be the best approach — implement the most impactful fix o
     messageIndex: 0,
     messagesSent: 0,
     status: "idle",
+    // Multi-agent mode
+    multiAgentEnabled: false,
+    activeRoster: [],         // resolved agent objects
+    activeRosterIds: null,    // null = use default order
   };
+
+  // Resolve roster from LOVABLE_AGENTS global using ID list
+  function resolveRoster(ids) {
+    const rosterIds = ids || (typeof LOVABLE_AGENTS !== "undefined" ? LOVABLE_AGENTS.defaultRosterOrder : []);
+    const roster = [];
+    if (typeof LOVABLE_AGENTS === "undefined") return roster;
+    for (const id of rosterIds) {
+      const agent = LOVABLE_AGENTS.roster.find((a) => a.id === id);
+      if (agent) roster.push(agent);
+    }
+    return roster;
+  }
+
+  // Get current agent info for multi-agent mode
+  function getAgentInfo() {
+    if (!state.multiAgentEnabled || state.activeRoster.length === 0) return null;
+    const roster = state.activeRoster;
+    const rosterSize = roster.length;
+    const messagesPerRound = rosterSize * 2;
+    const positionInRound = state.messageIndex % messagesPerRound;
+    const agentSlotIndex = Math.floor(positionInRound / 2);
+    const isAgentTurn = positionInRound % 2 === 0;
+    const roundNumber = Math.floor(state.messageIndex / messagesPerRound) + 1;
+    const loopNumber = Math.floor(state.messageIndex / 2) + 1;
+    const agent = roster[agentSlotIndex];
+    return { agent, agentSlotIndex, isAgentTurn, roundNumber, loopNumber, rosterSize };
+  }
 
   // Extract project ID from URL for per-project state
   function getProjectId() {
@@ -182,6 +214,38 @@ You decide what will be the best approach — implement the most impactful fix o
   // ── Builder/Critic message selection ──
 
   function getNextMessage() {
+    // === MULTI-AGENT MODE ===
+    if (state.multiAgentEnabled && state.activeRoster.length > 0) {
+      const info = getAgentInfo();
+      if (!info) return state.builderPrompt; // fallback
+      const { agent, agentSlotIndex, isAgentTurn, roundNumber, loopNumber } = info;
+      let message;
+
+      if (isAgentTurn) {
+        message = agent.prompt;
+        // Challenge injection: every N full rounds on the first agent's turn
+        if (
+          state.challengeEnabled &&
+          roundNumber > 1 &&
+          roundNumber % CHALLENGE_EVERY_N_ROUNDS === 0 &&
+          agentSlotIndex === 0
+        ) {
+          message += CHALLENGE_PROMPT;
+          log(`Round #${roundNumber}: Injecting challenge prompt!`);
+        }
+        log(`Round #${roundNumber}, Loop #${loopNumber}: ${agent.name} turn`);
+      } else {
+        // Critic turn — context-aware
+        message = LOVABLE_AGENTS.criticTemplate
+          .replace("{AGENT_NAME}", agent.name)
+          .replace("{CRITIC_CONTEXT}", agent.criticContext);
+        log(`Round #${roundNumber}, Loop #${loopNumber}: CRITIC (reviewing ${agent.name})`);
+      }
+
+      return message;
+    }
+
+    // === CLASSIC MODE ===
     const isBuilder = state.messageIndex % 2 === 0;
     const loopNumber = Math.floor(state.messageIndex / 2) + 1;
     let message;
@@ -303,13 +367,7 @@ You decide what will be the best approach — implement the most impactful fix o
         sendingStartTime = 0;
         saveState();
 
-        chrome.runtime.sendMessage({
-          type: "STATUS_UPDATE",
-          status: "waiting",
-          messagesSent: state.messagesSent,
-          role: state.messageIndex % 2 === 0 ? "builder" : "critic",
-          loopNumber: Math.floor(state.messageIndex / 2) + 1,
-        }).catch(() => {});
+        chrome.runtime.sendMessage(buildStatusMessage("waiting")).catch(() => {});
 
         updateStatus("waiting");
       } catch (err) {
@@ -445,7 +503,13 @@ You decide what will be the best approach — implement the most impactful fix o
 
     const hasInput = !!findChatInput();
     const btnState = getButtonState();
-    const nextRole = state.messageIndex % 2 === 0 ? "Builder" : "Critic";
+    let nextRole;
+    if (state.multiAgentEnabled && state.activeRoster.length > 0) {
+      const info = getAgentInfo();
+      nextRole = info ? (info.isAgentTurn ? info.agent.name : `Critic (${info.agent.name})`) : "Unknown";
+    } else {
+      nextRole = state.messageIndex % 2 === 0 ? "Builder" : "Critic";
+    }
     log(
       `Observer started. Input: ${hasInput ? "YES" : "NO"}, Button: ${btnState}, Next: ${nextRole}`
     );
@@ -504,6 +568,8 @@ You decide what will be the best approach — implement the most impactful fix o
     data["criticPrompt"] = state.criticPrompt;
     data["challengeEnabled"] = state.challengeEnabled;
     data["delay"] = state.delay;
+    data["multiAgentEnabled"] = state.multiAgentEnabled;
+    if (state.activeRosterIds) data["activeRosterIds"] = JSON.stringify(state.activeRosterIds);
     chrome.storage.local.set(data);
   }
 
@@ -516,6 +582,8 @@ You decide what will be the best approach — implement the most impactful fix o
           "criticPrompt",
           "challengeEnabled",
           "delay",
+          "multiAgentEnabled",
+          "activeRosterIds",
           // Per-project state
           KEY_PREFIX + "enabled",
           KEY_PREFIX + "messageIndex",
@@ -529,6 +597,13 @@ You decide what will be the best approach — implement the most impactful fix o
           if (typeof data.challengeEnabled === "boolean")
             state.challengeEnabled = data.challengeEnabled;
           if (typeof data.delay === "number") state.delay = data.delay;
+          // Multi-agent
+          if (typeof data.multiAgentEnabled === "boolean")
+            state.multiAgentEnabled = data.multiAgentEnabled;
+          if (typeof data.activeRosterIds === "string") {
+            try { state.activeRosterIds = JSON.parse(data.activeRosterIds); } catch (e) { /* ignore */ }
+          }
+          state.activeRoster = resolveRoster(state.activeRosterIds);
           // Per-project
           const enabled = data[KEY_PREFIX + "enabled"];
           const msgIdx = data[KEY_PREFIX + "messageIndex"];
@@ -542,6 +617,31 @@ You decide what will be the best approach — implement the most impactful fix o
     });
   }
 
+  function buildStatusMessage(status) {
+    const msg = {
+      type: "STATUS_UPDATE",
+      status,
+      messagesSent: state.messagesSent,
+      agentMode: state.multiAgentEnabled ? "multi-agent" : "classic",
+      loopNumber: Math.floor(state.messageIndex / 2) + 1,
+    };
+
+    if (state.multiAgentEnabled && state.activeRoster.length > 0) {
+      const info = getAgentInfo();
+      if (info) {
+        msg.agentName = info.agent.name;
+        msg.agentShortName = info.agent.shortName;
+        msg.agentColor = info.agent.color;
+        msg.isAgentTurn = info.isAgentTurn;
+        msg.roundNumber = info.roundNumber;
+      }
+    } else {
+      msg.role = state.messageIndex % 2 === 0 ? "builder" : "critic";
+    }
+
+    return msg;
+  }
+
   function updateStatus(status) {
     state.status = status;
     if (!isContextValid()) {
@@ -549,13 +649,7 @@ You decide what will be the best approach — implement the most impactful fix o
       stopObserving();
       return;
     }
-    chrome.runtime.sendMessage({
-      type: "STATUS_UPDATE",
-      status,
-      messagesSent: state.messagesSent,
-      role: state.messageIndex % 2 === 0 ? "builder" : "critic",
-      loopNumber: Math.floor(state.messageIndex / 2) + 1,
-    }).catch(() => {});
+    chrome.runtime.sendMessage(buildStatusMessage(status)).catch(() => {});
   }
 
   function log(msg) {
@@ -589,16 +683,14 @@ You decide what will be the best approach — implement the most impactful fix o
     }
 
     if (msg.type === "GET_STATUS") {
-      sendResponse({
-        status: state.status,
-        enabled: state.enabled,
-        messagesSent: state.messagesSent,
-        messageIndex: state.messageIndex,
-        hasTextarea: !!findChatInput(),
-        hasSendButton: !!getActionButton(),
-        role: state.messageIndex % 2 === 0 ? "builder" : "critic",
-        loopNumber: Math.floor(state.messageIndex / 2) + 1,
-      });
+      const statusMsg = buildStatusMessage(state.status);
+      statusMsg.enabled = state.enabled;
+      statusMsg.messageIndex = state.messageIndex;
+      statusMsg.hasTextarea = !!findChatInput();
+      statusMsg.hasSendButton = !!getActionButton();
+      statusMsg.multiAgentEnabled = state.multiAgentEnabled;
+      statusMsg.activeRosterIds = state.activeRosterIds;
+      sendResponse(statusMsg);
     }
 
     if (msg.type === "SEND_NOW") {
@@ -613,13 +705,33 @@ You decide what will be the best approach — implement the most impactful fix o
       sendResponse({ ok: true });
     }
 
+    if (msg.type === "UPDATE_MODE") {
+      state.multiAgentEnabled = !!msg.multiAgentEnabled;
+      if (!state.activeRoster.length) {
+        state.activeRoster = resolveRoster(state.activeRosterIds);
+      }
+      saveState();
+      log(`Mode switched to: ${state.multiAgentEnabled ? "Multi-Agent" : "Classic"}`);
+      sendResponse({ ok: true });
+    }
+
+    if (msg.type === "UPDATE_ROSTER") {
+      if (Array.isArray(msg.rosterIds) && msg.rosterIds.length > 0) {
+        state.activeRosterIds = msg.rosterIds;
+        state.activeRoster = resolveRoster(msg.rosterIds);
+        saveState();
+        log(`Roster updated: ${state.activeRoster.map((a) => a.shortName).join(" → ")}`);
+      }
+      sendResponse({ ok: true });
+    }
+
     return true;
   });
 
   // ── Init ──
 
   async function init() {
-    log(`Content script loaded — Builder/Critic loop. Project: ${PROJECT_ID}`);
+    log(`Content script loaded. Project: ${PROJECT_ID}`);
     await loadState();
 
     if (state.enabled) {

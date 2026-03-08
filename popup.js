@@ -54,8 +54,17 @@ const challengeToggle = $("#challengeToggle");
 const saveBtn = $("#saveBtn");
 const sendNowBtn = $("#sendNowBtn");
 const resetBtn = $("#resetBtn");
+const classicPanel = $("#classicPanel");
+const multiAgentPanel = $("#multiAgentPanel");
+const agentRoster = $("#agentRoster");
+const roundStat = $("#roundStat");
+const roundNumber = $("#roundNumber");
 
-// Tab switching
+let currentMode = "classic"; // "classic" or "multi-agent"
+let rosterOrder = []; // current roster IDs in order
+
+// ── Tab switching (classic mode Builder/Critic) ──
+
 document.querySelectorAll(".tab").forEach((tab) => {
   tab.addEventListener("click", () => {
     document.querySelectorAll(".tab").forEach((t) => t.classList.remove("active"));
@@ -66,10 +75,140 @@ document.querySelectorAll(".tab").forEach((tab) => {
   });
 });
 
-// Load global settings (prompts, delay, challenge) from storage
-// Per-project state (enabled, counters) comes from the content script
+// ── Mode switching ──
+
+document.querySelectorAll(".mode-tab").forEach((tab) => {
+  tab.addEventListener("click", () => {
+    document.querySelectorAll(".mode-tab").forEach((t) => t.classList.remove("active"));
+    tab.classList.add("active");
+    const mode = tab.dataset.mode;
+    setMode(mode);
+  });
+});
+
+function setMode(mode) {
+  currentMode = mode;
+  const isMultiAgent = mode === "multi-agent";
+
+  classicPanel.style.display = isMultiAgent ? "none" : "";
+  multiAgentPanel.style.display = isMultiAgent ? "" : "none";
+  roundStat.style.display = isMultiAgent ? "" : "none";
+  saveBtn.style.display = isMultiAgent ? "none" : "";
+
+  // Update challenge label text
+  const challengeLabel = document.querySelector(".challenge-label");
+  if (challengeLabel) {
+    challengeLabel.textContent = isMultiAgent
+      ? "Inject challenge every 3 rounds"
+      : "Inject challenge every 5 loops";
+  }
+
+  // Notify content script
+  sendToContentScript({ type: "UPDATE_MODE", multiAgentEnabled: isMultiAgent });
+
+  // Persist mode
+  chrome.storage.local.set({ multiAgentEnabled: isMultiAgent });
+}
+
+// ── Agent Roster Rendering ──
+
+function renderRoster(activeIds) {
+  if (typeof LOVABLE_AGENTS === "undefined") {
+    agentRoster.innerHTML = '<div class="roster-info">Agent data not available.</div>';
+    return;
+  }
+
+  // Use activeIds to determine order and which are checked
+  const allAgents = LOVABLE_AGENTS.roster;
+  const defaultIds = LOVABLE_AGENTS.defaultRosterOrder;
+  const orderedIds = activeIds || defaultIds;
+
+  // Build ordered list: active agents first in order, then inactive ones
+  const orderedAgents = [];
+  for (const id of orderedIds) {
+    const agent = allAgents.find((a) => a.id === id);
+    if (agent) orderedAgents.push({ ...agent, active: true });
+  }
+  for (const agent of allAgents) {
+    if (!orderedIds.includes(agent.id)) {
+      orderedAgents.push({ ...agent, active: false });
+    }
+  }
+
+  rosterOrder = orderedAgents.filter((a) => a.active).map((a) => a.id);
+
+  agentRoster.innerHTML = orderedAgents
+    .map(
+      (agent, idx) => `
+    <div class="agent-card ${agent.active ? "active" : ""}" data-id="${agent.id}">
+      <input type="checkbox" class="agent-check" data-id="${agent.id}" ${agent.active ? "checked" : ""}>
+      <span class="agent-dot" style="background:${agent.color}"></span>
+      <span class="agent-name">${agent.name}</span>
+      <span class="agent-short">${agent.shortName}</span>
+      <span class="agent-reorder">
+        <button class="reorder-btn" data-dir="up" data-id="${agent.id}" title="Move up">&uarr;</button>
+        <button class="reorder-btn" data-dir="down" data-id="${agent.id}" title="Move down">&darr;</button>
+      </span>
+    </div>`
+    )
+    .join("");
+
+  // Checkbox handlers
+  agentRoster.querySelectorAll(".agent-check").forEach((cb) => {
+    cb.addEventListener("change", () => {
+      updateRosterFromUI();
+    });
+  });
+
+  // Reorder handlers
+  agentRoster.querySelectorAll(".reorder-btn").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      const id = btn.dataset.id;
+      const dir = btn.dataset.dir;
+      reorderAgent(id, dir);
+    });
+  });
+}
+
+function updateRosterFromUI() {
+  const cards = agentRoster.querySelectorAll(".agent-card");
+  const newIds = [];
+  cards.forEach((card) => {
+    const cb = card.querySelector(".agent-check");
+    if (cb && cb.checked) {
+      newIds.push(card.dataset.id);
+    }
+  });
+
+  if (newIds.length === 0) return; // prevent empty roster
+
+  rosterOrder = newIds;
+  sendToContentScript({ type: "UPDATE_ROSTER", rosterIds: newIds });
+  chrome.storage.local.set({ activeRosterIds: JSON.stringify(newIds) });
+}
+
+function reorderAgent(id, dir) {
+  const idx = rosterOrder.indexOf(id);
+  if (idx === -1) return;
+
+  if (dir === "up" && idx > 0) {
+    [rosterOrder[idx - 1], rosterOrder[idx]] = [rosterOrder[idx], rosterOrder[idx - 1]];
+  } else if (dir === "down" && idx < rosterOrder.length - 1) {
+    [rosterOrder[idx], rosterOrder[idx + 1]] = [rosterOrder[idx + 1], rosterOrder[idx]];
+  } else {
+    return;
+  }
+
+  renderRoster(rosterOrder);
+  sendToContentScript({ type: "UPDATE_ROSTER", rosterIds: rosterOrder });
+  chrome.storage.local.set({ activeRosterIds: JSON.stringify(rosterOrder) });
+}
+
+// ── Load settings from storage ──
+
 chrome.storage.local.get(
-  ["builderPrompt", "criticPrompt", "challengeEnabled", "delay"],
+  ["builderPrompt", "criticPrompt", "challengeEnabled", "delay", "multiAgentEnabled", "activeRosterIds"],
   (data) => {
     builderArea.value =
       typeof data.builderPrompt === "string"
@@ -88,12 +227,42 @@ chrome.storage.local.get(
     delaySlider.value = data.delay || 5;
     delayValue.textContent = `${delaySlider.value}s`;
 
+    // Multi-agent mode
+    const isMultiAgent = data.multiAgentEnabled === true;
+    currentMode = isMultiAgent ? "multi-agent" : "classic";
+
+    // Set active mode tab
+    document.querySelectorAll(".mode-tab").forEach((t) => {
+      t.classList.toggle("active", t.dataset.mode === currentMode);
+    });
+
+    classicPanel.style.display = isMultiAgent ? "none" : "";
+    multiAgentPanel.style.display = isMultiAgent ? "" : "none";
+    roundStat.style.display = isMultiAgent ? "" : "none";
+    saveBtn.style.display = isMultiAgent ? "none" : "";
+
+    // Update challenge label
+    const challengeLabel = document.querySelector(".challenge-label");
+    if (challengeLabel) {
+      challengeLabel.textContent = isMultiAgent
+        ? "Inject challenge every 3 rounds"
+        : "Inject challenge every 5 loops";
+    }
+
+    // Parse and render roster
+    let activeIds = null;
+    if (typeof data.activeRosterIds === "string") {
+      try { activeIds = JSON.parse(data.activeRosterIds); } catch (e) { /* ignore */ }
+    }
+    renderRoster(activeIds);
+
     // Get per-project state from the active tab's content script
     refreshStatus();
   }
 );
 
-// Toggle
+// ── Toggle ──
+
 enableToggle.addEventListener("change", () => {
   const enabled = enableToggle.checked;
   toggleLabel.textContent = enabled ? "ON" : "OFF";
@@ -101,7 +270,8 @@ enableToggle.addEventListener("change", () => {
   updateStatusUI(enabled ? "waiting" : "paused");
 });
 
-// Delay slider
+// ── Delay slider ──
+
 delaySlider.addEventListener("input", () => {
   delayValue.textContent = `${delaySlider.value}s`;
 });
@@ -112,7 +282,8 @@ delaySlider.addEventListener("change", () => {
   });
 });
 
-// Challenge toggle
+// ── Challenge toggle ──
+
 challengeToggle.addEventListener("change", () => {
   sendToContentScript({
     type: "UPDATE_SETTINGS",
@@ -120,7 +291,8 @@ challengeToggle.addEventListener("change", () => {
   });
 });
 
-// Save prompts
+// ── Save prompts (classic mode) ──
+
 saveBtn.addEventListener("click", () => {
   const builder = builderArea.value.trim() || DEFAULT_BUILDER_PROMPT;
   const critic = criticArea.value.trim() || DEFAULT_CRITIC_PROMPT;
@@ -138,29 +310,64 @@ saveBtn.addEventListener("click", () => {
   setTimeout(() => (saveBtn.textContent = "Save Prompts"), 1500);
 });
 
-// Send now
+// ── Send now ──
+
 sendNowBtn.addEventListener("click", () => {
   sendToContentScript({ type: "SEND_NOW" });
 });
 
-// Reset
+// ── Reset ──
+
 resetBtn.addEventListener("click", () => {
   sendToContentScript({ type: "RESET_COUNT" });
   messagesSent.textContent = "0";
   loopNumber.textContent = "1";
-  nextRole.textContent = "B";
-  nextRole.style.color = "#30d030";
+  roundNumber.textContent = "1";
+  if (currentMode === "multi-agent") {
+    const info = getFirstAgentDisplay();
+    nextRole.textContent = info.shortName;
+    nextRole.style.color = info.color;
+  } else {
+    nextRole.textContent = "B";
+    nextRole.style.color = "#30d030";
+  }
 });
 
-// Status updates from content script
+function getFirstAgentDisplay() {
+  if (typeof LOVABLE_AGENTS !== "undefined" && rosterOrder.length > 0) {
+    const agent = LOVABLE_AGENTS.roster.find((a) => a.id === rosterOrder[0]);
+    if (agent) return { shortName: agent.shortName, color: agent.color };
+  }
+  return { shortName: "UI", color: "#6c5ce7" };
+}
+
+// ── Status updates from content script ──
+
 chrome.runtime.onMessage.addListener((msg) => {
   if (msg.type === "STATUS_UPDATE") {
     updateStatusUI(msg.status);
     messagesSent.textContent = msg.messagesSent || 0;
-    if (msg.role) {
-      nextRole.textContent = msg.role === "builder" ? "B" : "C";
-      nextRole.style.color = msg.role === "builder" ? "#30d030" : "#ff6b6b";
+
+    if (msg.agentMode === "multi-agent") {
+      // Multi-agent mode display
+      if (msg.isAgentTurn && msg.agentShortName) {
+        nextRole.textContent = msg.agentShortName;
+        nextRole.style.color = msg.agentColor || "#6c5ce7";
+      } else {
+        nextRole.textContent = "C";
+        nextRole.style.color = "#ff6b6b";
+      }
+      if (msg.roundNumber) {
+        roundNumber.textContent = msg.roundNumber;
+      }
+    } else {
+      // Classic mode display
+      if (msg.role) {
+        nextRole.textContent = msg.role === "builder" ? "B" : "C";
+        nextRole.style.color = msg.role === "builder" ? "#30d030" : "#ff6b6b";
+      }
     }
+
     if (msg.loopNumber) {
       loopNumber.textContent = msg.loopNumber;
     }
@@ -193,11 +400,25 @@ function refreshStatus() {
     enableToggle.checked = response.enabled || false;
     toggleLabel.textContent = response.enabled ? "ON" : "OFF";
 
-    if (response.role) {
-      nextRole.textContent = response.role === "builder" ? "B" : "C";
-      nextRole.style.color =
-        response.role === "builder" ? "#30d030" : "#ff6b6b";
+    if (response.agentMode === "multi-agent") {
+      if (response.isAgentTurn && response.agentShortName) {
+        nextRole.textContent = response.agentShortName;
+        nextRole.style.color = response.agentColor || "#6c5ce7";
+      } else {
+        nextRole.textContent = "C";
+        nextRole.style.color = "#ff6b6b";
+      }
+      if (response.roundNumber) {
+        roundNumber.textContent = response.roundNumber;
+      }
+    } else {
+      if (response.role) {
+        nextRole.textContent = response.role === "builder" ? "B" : "C";
+        nextRole.style.color =
+          response.role === "builder" ? "#30d030" : "#ff6b6b";
+      }
     }
+
     if (response.loopNumber) {
       loopNumber.textContent = response.loopNumber;
     }

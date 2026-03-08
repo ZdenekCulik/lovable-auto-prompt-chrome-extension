@@ -23,7 +23,7 @@
   "content_scripts": [
     {
       "matches": ["*://lovable.dev/*"],
-      "js": ["content.js"],
+      "js": ["agents.js", "content.js"],
       "run_at": "document_idle"
     }
   ]
