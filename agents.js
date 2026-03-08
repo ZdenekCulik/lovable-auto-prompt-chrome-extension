@@ -32,8 +32,7 @@ CONSTRAINTS
 - Use consistent design tokens, not hardcoded values.
 - Ensure WCAG AA color contrast compliance.
 - Keep changes focused — one clear improvement per iteration.
-- Do not modify more than ~30% of the codebase.`,
-      criticContext: "The UI Designer just worked on visual design — spacing, color consistency, typography, component styling, and design system coherence. Evaluate whether the changes improved visual consistency and hierarchy. Check for design system violations, contrast issues, or visual regressions."
+- Do not modify more than ~30% of the codebase.`
     },
 
     {
@@ -64,8 +63,7 @@ CONSTRAINTS
 - Prefer small, focused refactors over large rewrites.
 - Follow existing project conventions and patterns.
 - Ensure changes improve measurable code quality.
-- Avoid introducing large new dependencies.`,
-      criticContext: "The Frontend Developer just worked on code quality — component architecture, performance, state management, and technical patterns. Evaluate whether the changes improved code quality without introducing bugs. Check for regressions, broken functionality, or architectural issues."
+- Avoid introducing large new dependencies.`
     },
 
     {
@@ -96,8 +94,7 @@ CONSTRAINTS
 - Changes should reduce user friction, not add complexity.
 - Ensure new flows are intuitive without documentation.
 - Keep the application functional and stable.
-- Focus on structural UX improvements, not visual polish.`,
-      criticContext: "The UX Architect just worked on user flows — navigation, information architecture, interaction patterns, and usability. Evaluate whether the changes reduced user friction and improved flow clarity. Check for broken navigation, confusing interactions, or UX regressions."
+- Focus on structural UX improvements, not visual polish.`
     },
 
     {
@@ -128,8 +125,7 @@ CONSTRAINTS
 - Use semantic HTML elements before resorting to ARIA attributes.
 - Ensure keyboard and screen reader parity with mouse/visual interaction.
 - Keep changes focused — one clear fix per iteration.
-- Test that fixes don't introduce visual regressions.`,
-      criticContext: "The Accessibility Auditor just worked on WCAG compliance — keyboard navigation, screen reader support, color contrast, focus management, and semantic HTML. Evaluate whether the changes improved accessibility without visual regressions. Check for remaining WCAG violations or broken interactions."
+- Test that fixes don't introduce visual regressions.`
     },
 
     {
@@ -160,8 +156,7 @@ CONSTRAINTS
 - Prefer measurable optimizations over micro-optimizations.
 - Follow existing project conventions.
 - Keep changes focused and verifiable.
-- Avoid premature optimization — target real bottlenecks.`,
-      criticContext: "The Performance Optimizer just worked on speed and efficiency — bundle size, rendering performance, Core Web Vitals, lazy loading, and caching. Evaluate whether the changes improved performance without breaking functionality. Check for regressions, increased complexity, or premature optimizations."
+- Avoid premature optimization — target real bottlenecks.`
     },
 
     {
@@ -192,24 +187,9 @@ CONSTRAINTS
 - Prefer refactoring existing code over adding new abstractions.
 - Keep the codebase approachable for all skill levels.
 - Avoid over-engineering — solve real problems, not hypothetical ones.
-- Consider the full impact of changes on the codebase.`,
-      criticContext: "The Senior Developer just worked on architecture, edge cases, error handling, security, and technical debt. Evaluate whether the changes improved code health and robustness. Check for over-engineering, broken functionality, or new technical debt introduced."
+- Consider the full impact of changes on the codebase.`
     }
   ],
-
-  criticTemplate: `You are the Critic AI reviewing changes just made by the {AGENT_NAME}.
-
-CONTEXT: {CRITIC_CONTEXT}
-
-EVALUATION TASKS
-1. Assess the quality and impact of the changes just made.
-2. Identify any regressions, bugs, or unintended side effects.
-3. Evaluate whether the changes align with the agent's stated focus area.
-4. Identify 3-5 remaining problems or weaknesses in the current state of the project.
-5. Propose the most impactful direction for the NEXT specialist to explore.
-
-Be specific and actionable. Reference actual code, components, or behaviors.
-You decide what will be the best approach — implement the most impactful fix or improvement you identified.`,
 
   defaultRosterOrder: [
     "ui-designer",

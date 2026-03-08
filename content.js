@@ -38,14 +38,10 @@
     if (state.activeRoster.length === 0) return null;
     const roster = state.activeRoster;
     const rosterSize = roster.length;
-    const messagesPerRound = rosterSize * 2;
-    const positionInRound = state.messageIndex % messagesPerRound;
-    const agentSlotIndex = Math.floor(positionInRound / 2);
-    const isAgentTurn = positionInRound % 2 === 0;
-    const roundNumber = Math.floor(state.messageIndex / messagesPerRound) + 1;
-    const loopNumber = Math.floor(state.messageIndex / 2) + 1;
+    const agentSlotIndex = state.messageIndex % rosterSize;
+    const roundNumber = Math.floor(state.messageIndex / rosterSize) + 1;
     const agent = roster[agentSlotIndex];
-    return { agent, agentSlotIndex, isAgentTurn, roundNumber, loopNumber, rosterSize };
+    return { agent, agentSlotIndex, roundNumber, rosterSize };
   }
 
   // Extract project ID from URL for per-project state
@@ -168,30 +164,21 @@
       return "Analyze the current project and suggest improvements.";
     }
 
-    const { agent, agentSlotIndex, isAgentTurn, roundNumber, loopNumber } = info;
-    let message;
+    const { agent, agentSlotIndex, roundNumber } = info;
+    let message = agent.prompt;
 
-    if (isAgentTurn) {
-      message = agent.prompt;
-      // Challenge injection: every N full rounds on the first agent's turn
-      if (
-        state.challengeEnabled &&
-        roundNumber > 1 &&
-        roundNumber % CHALLENGE_EVERY_N_ROUNDS === 0 &&
-        agentSlotIndex === 0
-      ) {
-        message += CHALLENGE_PROMPT;
-        log(`Round #${roundNumber}: Injecting challenge prompt!`);
-      }
-      log(`Round #${roundNumber}, Loop #${loopNumber}: ${agent.name} turn`);
-    } else {
-      // Critic turn — context-aware
-      message = LOVABLE_AGENTS.criticTemplate
-        .replace("{AGENT_NAME}", agent.name)
-        .replace("{CRITIC_CONTEXT}", agent.criticContext);
-      log(`Round #${roundNumber}, Loop #${loopNumber}: CRITIC (reviewing ${agent.name})`);
+    // Challenge injection: every N full rounds on the first agent's turn
+    if (
+      state.challengeEnabled &&
+      roundNumber > 1 &&
+      roundNumber % CHALLENGE_EVERY_N_ROUNDS === 0 &&
+      agentSlotIndex === 0
+    ) {
+      message += CHALLENGE_PROMPT;
+      log(`Round #${roundNumber}: Injecting challenge prompt!`);
     }
 
+    log(`Round #${roundNumber}, Agent #${agentSlotIndex + 1}/${info.rosterSize}: ${agent.name}`);
     return message;
   }
 
@@ -427,7 +414,7 @@
     const hasInput = !!findChatInput();
     const btnState = getButtonState();
     const info = getAgentInfo();
-    const nextRole = info ? (info.isAgentTurn ? info.agent.name : `Critic (${info.agent.name})`) : "Unknown";
+    const nextRole = info ? info.agent.name : "Unknown";
     log(
       `Observer started. Input: ${hasInput ? "YES" : "NO"}, Button: ${btnState}, Next: ${nextRole}`
     );
@@ -528,14 +515,12 @@
       type: "STATUS_UPDATE",
       status,
       messagesSent: state.messagesSent,
-      loopNumber: Math.floor(state.messageIndex / 2) + 1,
     };
 
     if (info) {
       msg.agentName = info.agent.name;
       msg.agentShortName = info.agent.shortName;
       msg.agentColor = info.agent.color;
-      msg.isAgentTurn = info.isAgentTurn;
       msg.roundNumber = info.roundNumber;
     }
 

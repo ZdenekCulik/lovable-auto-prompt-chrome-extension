@@ -202,21 +202,16 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
     updateStatusUI(msg.status);
     messagesSent.textContent = msg.messagesSent || 0;
 
-    if (msg.isAgentTurn && msg.agentShortName) {
+    if (msg.agentShortName) {
       nextRole.textContent = msg.agentShortName;
       nextRole.style.color = msg.agentColor || "#6c5ce7";
-    } else {
-      nextRole.textContent = "C";
-      nextRole.style.color = "#ff6b6b";
     }
 
     if (msg.roundNumber) {
       roundNumber.textContent = msg.roundNumber;
     }
 
-    if (msg.loopNumber) {
-      loopNumber.textContent = msg.loopNumber;
-    }
+    loopNumber.textContent = (msg.messagesSent || 0) + 1;
   }
 });
 
@@ -245,21 +240,16 @@ function refreshStatus() {
     enableToggle.checked = response.enabled || false;
     toggleLabel.textContent = response.enabled ? "ON" : "OFF";
 
-    if (response.isAgentTurn && response.agentShortName) {
+    if (response.agentShortName) {
       nextRole.textContent = response.agentShortName;
       nextRole.style.color = response.agentColor || "#6c5ce7";
-    } else {
-      nextRole.textContent = "C";
-      nextRole.style.color = "#ff6b6b";
     }
 
     if (response.roundNumber) {
       roundNumber.textContent = response.roundNumber;
     }
 
-    if (response.loopNumber) {
-      loopNumber.textContent = response.loopNumber;
-    }
+    loopNumber.textContent = (response.messagesSent || 0) + 1;
   });
 }
 
