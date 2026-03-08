@@ -31,12 +31,12 @@
         <span class="stat-value" id="loopNumber">1</span>
         <span class="stat-label">Loop #</span>
       </div>
-      <div class="stat" id="roundStat" style="display:none">
+      <div class="stat">
         <span class="stat-value" id="roundNumber">1</span>
         <span class="stat-label">Round</span>
       </div>
       <div class="stat">
-        <span class="stat-value" id="nextRole">B</span>
+        <span class="stat-value" id="nextRole">UI</span>
         <span class="stat-label">Next</span>
       </div>
     </div>
@@ -49,48 +49,23 @@
       </div>
     </div>
 
-    <!-- Mode toggle -->
     <div class="section">
-      <label class="section-label">Operating Mode</label>
-      <div class="mode-tabs">
-        <button class="mode-tab active" data-mode="classic">Classic</button>
-        <button class="mode-tab" data-mode="multi-agent">Multi-Agent</button>
+      <div class="agent-roster" id="agentRoster">
+        <!-- Rendered by popup.js -->
       </div>
-    </div>
-
-    <!-- Classic mode: Builder/Critic prompt editor -->
-    <div id="classicPanel">
-      <div class="section">
-        <div class="tabs">
-          <button class="tab active" data-tab="builder">Builder</button>
-          <button class="tab" data-tab="critic">Critic</button>
-        </div>
-        <textarea id="builderArea" rows="8" spellcheck="false" class="prompt-area"></textarea>
-        <textarea id="criticArea" rows="8" spellcheck="false" class="prompt-area" style="display:none"></textarea>
-      </div>
-    </div>
-
-    <!-- Multi-Agent mode: roster panel -->
-    <div id="multiAgentPanel" style="display:none">
-      <div class="section">
-        <div class="agent-roster" id="agentRoster">
-          <!-- Rendered by popup.js -->
-        </div>
-        <div class="roster-info">
-          Each agent takes a turn, followed by a context-aware critic review. Fully autonomous.
-        </div>
+      <div class="roster-info">
+        Each agent takes a turn, followed by a context-aware critic review. Fully autonomous.
       </div>
     </div>
 
     <div class="section">
       <label class="challenge-row">
         <input type="checkbox" id="challengeToggle" checked>
-        <span class="challenge-label">Inject challenge every 5 loops</span>
+        <span class="challenge-label">Inject challenge every 3 rounds</span>
       </label>
     </div>
 
     <div class="actions">
-      <button id="saveBtn" class="btn primary">Save Prompts</button>
       <button id="sendNowBtn" class="btn">Send Now</button>
       <button id="resetBtn" class="btn danger">Reset</button>
     </div>

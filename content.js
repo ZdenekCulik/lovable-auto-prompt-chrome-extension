@@ -1,66 +1,22 @@
-// Lovable Auto-Prompter Content Script — Builder/Critic Loop
+// Lovable Auto-Prompter Content Script — Multi-Agent Rotation
 (function () {
   "use strict";
-
-  const DEFAULT_BUILDER_PROMPT = `You are the Builder AI responsible for evolving this project.
-Your goal is to improve the product through iterative experimentation.
-Aim for a premium SaaS quality level similar to products like Linear, Vercel, or Stripe.
-
-You may improve: UI design, UX flows, interaction design, performance, architecture, useful features.
-
-GUIDELINES
-- You are encouraged to explore new ideas.
-- Improvements may be incremental or bold.
-- Avoid unnecessary full rewrites.
-- Keep the application functional.
-- Focus on changes that meaningfully improve the product.
-
-PROCESS
-1. ANALYZE the current project state and identify promising opportunities.
-2. SELECT A DIRECTION — redesign a component, simplify a user flow, improve responsiveness, improve performance, introduce a helpful feature, or simplify architecture.
-3. IMPLEMENT the improvement in the code.
-4. STABILIZE — ensure the application still runs correctly and fix issues introduced.
-5. REPORT — briefly explain what was changed, why it improves the product, and potential next directions.
-
-LIMITS
-- Do not modify more than ~30% of the codebase in one iteration.
-- Avoid introducing large new dependencies.
-- Preserve core functionality.`;
-
-  const DEFAULT_CRITIC_PROMPT = `You are the Critic AI reviewing the current state of this project.
-Your role is to evaluate the quality of the product and guide further improvements.
-
-Analyze the project from these perspectives: UI design quality, UX clarity, performance, architecture, code maintainability, accessibility, responsiveness.
-
-TASKS
-1. Identify the 5 most important problems or weaknesses in the current implementation.
-2. Suggest concrete improvements that would meaningfully improve the product.
-3. Identify regressions, unnecessary complexity, design inconsistencies, and performance issues.
-4. Propose the 3 most impactful directions the Builder AI should explore next.
-
-Be honest and critical. The goal is to improve the project quality.
-You decide what will be the best approach — implement the most impactful fix or improvement you identified.`;
 
   const CHALLENGE_PROMPT = `\n\nADDITIONAL CHALLENGE: Challenge the current product concept. If a fundamentally better product structure exists, propose it and explain why. Think beyond incremental improvements.`;
 
   const DEFAULT_DELAY = 5;
   const MIN_AI_WORK_TIME = 10000;
-  const CHALLENGE_EVERY_N_LOOPS = 5; // inject challenge every 5 full loops (classic) or 3 rounds (multi-agent)
-  const CHALLENGE_EVERY_N_ROUNDS = 3; // for multi-agent mode
+  const CHALLENGE_EVERY_N_ROUNDS = 3;
 
   const SEND_ARROW_PREFIX = "M11 19V7";
 
   let state = {
     enabled: false,
-    builderPrompt: DEFAULT_BUILDER_PROMPT,
-    criticPrompt: DEFAULT_CRITIC_PROMPT,
     challengeEnabled: true,
     delay: DEFAULT_DELAY,
     messageIndex: 0,
     messagesSent: 0,
     status: "idle",
-    // Multi-agent mode
-    multiAgentEnabled: false,
     activeRoster: [],         // resolved agent objects
     activeRosterIds: null,    // null = use default order
   };
@@ -77,9 +33,9 @@ You decide what will be the best approach — implement the most impactful fix o
     return roster;
   }
 
-  // Get current agent info for multi-agent mode
+  // Get current agent info for rotation
   function getAgentInfo() {
-    if (!state.multiAgentEnabled || state.activeRoster.length === 0) return null;
+    if (state.activeRoster.length === 0) return null;
     const roster = state.activeRoster;
     const rosterSize = roster.length;
     const messagesPerRound = rosterSize * 2;
@@ -135,23 +91,17 @@ You decide what will be the best approach — implement the most impactful fix o
     const btn = getActionButton();
     if (!btn) return "unknown";
 
-    // Check SVG path for send arrow
     const path = btn.querySelector("svg path")?.getAttribute("d") || "";
     if (path.startsWith(SEND_ARROW_PREFIX)) return "send";
 
-    // Detect stop button: look for square/rect SVG elements or non-send-arrow paths
-    // Lovable uses various SVG shapes for stop — check for <rect>, <square>, or any
-    // non-empty path that isn't the send arrow (means AI is working)
     const svg = btn.querySelector("svg");
     if (svg) {
       const hasRect = svg.querySelector("rect");
       const hasSquare = svg.querySelector("path[d]");
       if (hasRect) return "stop";
-      // If there's a path but it's NOT the send arrow, treat as stop
       if (hasSquare && path && !path.startsWith(SEND_ARROW_PREFIX)) return "stop";
     }
 
-    // Disabled button with no recognizable icon = likely send state (waiting for input)
     if (btn.disabled) return "send";
     return "unknown";
   }
@@ -182,7 +132,6 @@ You decide what will be the best approach — implement the most impactful fix o
     element.focus();
 
     if (element.contentEditable === "true") {
-      // TipTap/ProseMirror: use execCommand which TipTap properly intercepts
       const sel = window.getSelection();
       const range = document.createRange();
       range.selectNodeContents(element);
@@ -195,7 +144,6 @@ You decide what will be the best approach — implement the most impactful fix o
     }
 
     if (element.tagName === "TEXTAREA") {
-      // Textarea fallback with native setter
       const nativeSetter = Object.getOwnPropertyDescriptor(
         window.HTMLTextAreaElement.prototype,
         "value"
@@ -211,60 +159,37 @@ You decide what will be the best approach — implement the most impactful fix o
     return false;
   }
 
-  // ── Builder/Critic message selection ──
+  // ── Agent rotation message selection ──
 
   function getNextMessage() {
-    // === MULTI-AGENT MODE ===
-    if (state.multiAgentEnabled && state.activeRoster.length > 0) {
-      const info = getAgentInfo();
-      if (!info) return state.builderPrompt; // fallback
-      const { agent, agentSlotIndex, isAgentTurn, roundNumber, loopNumber } = info;
-      let message;
-
-      if (isAgentTurn) {
-        message = agent.prompt;
-        // Challenge injection: every N full rounds on the first agent's turn
-        if (
-          state.challengeEnabled &&
-          roundNumber > 1 &&
-          roundNumber % CHALLENGE_EVERY_N_ROUNDS === 0 &&
-          agentSlotIndex === 0
-        ) {
-          message += CHALLENGE_PROMPT;
-          log(`Round #${roundNumber}: Injecting challenge prompt!`);
-        }
-        log(`Round #${roundNumber}, Loop #${loopNumber}: ${agent.name} turn`);
-      } else {
-        // Critic turn — context-aware
-        message = LOVABLE_AGENTS.criticTemplate
-          .replace("{AGENT_NAME}", agent.name)
-          .replace("{CRITIC_CONTEXT}", agent.criticContext);
-        log(`Round #${roundNumber}, Loop #${loopNumber}: CRITIC (reviewing ${agent.name})`);
-      }
-
-      return message;
+    const info = getAgentInfo();
+    if (!info) {
+      log("No agents available — cannot generate message");
+      return "Analyze the current project and suggest improvements.";
     }
 
-    // === CLASSIC MODE ===
-    const isBuilder = state.messageIndex % 2 === 0;
-    const loopNumber = Math.floor(state.messageIndex / 2) + 1;
+    const { agent, agentSlotIndex, isAgentTurn, roundNumber, loopNumber } = info;
     let message;
 
-    if (isBuilder) {
-      message = state.builderPrompt;
-      // Inject challenge every N loops on builder turn
+    if (isAgentTurn) {
+      message = agent.prompt;
+      // Challenge injection: every N full rounds on the first agent's turn
       if (
         state.challengeEnabled &&
-        loopNumber > 1 &&
-        loopNumber % CHALLENGE_EVERY_N_LOOPS === 0
+        roundNumber > 1 &&
+        roundNumber % CHALLENGE_EVERY_N_ROUNDS === 0 &&
+        agentSlotIndex === 0
       ) {
         message += CHALLENGE_PROMPT;
-        log(`Loop #${loopNumber}: Injecting challenge prompt!`);
+        log(`Round #${roundNumber}: Injecting challenge prompt!`);
       }
-      log(`Loop #${loopNumber}: BUILDER turn`);
+      log(`Round #${roundNumber}, Loop #${loopNumber}: ${agent.name} turn`);
     } else {
-      message = state.criticPrompt;
-      log(`Loop #${loopNumber}: CRITIC turn`);
+      // Critic turn — context-aware
+      message = LOVABLE_AGENTS.criticTemplate
+        .replace("{AGENT_NAME}", agent.name)
+        .replace("{CRITIC_CONTEXT}", agent.criticContext);
+      log(`Round #${roundNumber}, Loop #${loopNumber}: CRITIC (reviewing ${agent.name})`);
     }
 
     return message;
@@ -340,7 +265,6 @@ You decide what will be the best approach — implement the most impactful fix o
           btn.click();
           log("Submitted via button click (state: " + currentBtnState + ")");
         } else {
-          // Button disabled — try re-setting value and clicking after short wait
           log("Send button disabled — retrying value set + click...");
           if (input) setChatInputValue(input, message);
           setTimeout(() => {
@@ -428,7 +352,6 @@ You decide what will be the best approach — implement the most impactful fix o
       );
       sendingStartTime = 0;
       updateStatus("waiting");
-      // Re-attempt sending after delay
       pendingTimeout = setTimeout(() => {
         pendingTimeout = null;
         sendNextMessage();
@@ -503,13 +426,8 @@ You decide what will be the best approach — implement the most impactful fix o
 
     const hasInput = !!findChatInput();
     const btnState = getButtonState();
-    let nextRole;
-    if (state.multiAgentEnabled && state.activeRoster.length > 0) {
-      const info = getAgentInfo();
-      nextRole = info ? (info.isAgentTurn ? info.agent.name : `Critic (${info.agent.name})`) : "Unknown";
-    } else {
-      nextRole = state.messageIndex % 2 === 0 ? "Builder" : "Critic";
-    }
+    const info = getAgentInfo();
+    const nextRole = info ? (info.isAgentTurn ? info.agent.name : `Critic (${info.agent.name})`) : "Unknown";
     log(
       `Observer started. Input: ${hasInput ? "YES" : "NO"}, Button: ${btnState}, Next: ${nextRole}`
     );
@@ -564,11 +482,8 @@ You decide what will be the best approach — implement the most impactful fix o
     data[KEY_PREFIX + "messageIndex"] = state.messageIndex;
     data[KEY_PREFIX + "messagesSent"] = state.messagesSent;
     // Global settings (shared across projects)
-    data["builderPrompt"] = state.builderPrompt;
-    data["criticPrompt"] = state.criticPrompt;
     data["challengeEnabled"] = state.challengeEnabled;
     data["delay"] = state.delay;
-    data["multiAgentEnabled"] = state.multiAgentEnabled;
     if (state.activeRosterIds) data["activeRosterIds"] = JSON.stringify(state.activeRosterIds);
     chrome.storage.local.set(data);
   }
@@ -578,11 +493,8 @@ You decide what will be the best approach — implement the most impactful fix o
       chrome.storage.local.get(
         [
           // Global settings
-          "builderPrompt",
-          "criticPrompt",
           "challengeEnabled",
           "delay",
-          "multiAgentEnabled",
           "activeRosterIds",
           // Per-project state
           KEY_PREFIX + "enabled",
@@ -590,16 +502,9 @@ You decide what will be the best approach — implement the most impactful fix o
           KEY_PREFIX + "messagesSent",
         ],
         (data) => {
-          if (typeof data.builderPrompt === "string")
-            state.builderPrompt = data.builderPrompt;
-          if (typeof data.criticPrompt === "string")
-            state.criticPrompt = data.criticPrompt;
           if (typeof data.challengeEnabled === "boolean")
             state.challengeEnabled = data.challengeEnabled;
           if (typeof data.delay === "number") state.delay = data.delay;
-          // Multi-agent
-          if (typeof data.multiAgentEnabled === "boolean")
-            state.multiAgentEnabled = data.multiAgentEnabled;
           if (typeof data.activeRosterIds === "string") {
             try { state.activeRosterIds = JSON.parse(data.activeRosterIds); } catch (e) { /* ignore */ }
           }
@@ -618,25 +523,20 @@ You decide what will be the best approach — implement the most impactful fix o
   }
 
   function buildStatusMessage(status) {
+    const info = getAgentInfo();
     const msg = {
       type: "STATUS_UPDATE",
       status,
       messagesSent: state.messagesSent,
-      agentMode: state.multiAgentEnabled ? "multi-agent" : "classic",
       loopNumber: Math.floor(state.messageIndex / 2) + 1,
     };
 
-    if (state.multiAgentEnabled && state.activeRoster.length > 0) {
-      const info = getAgentInfo();
-      if (info) {
-        msg.agentName = info.agent.name;
-        msg.agentShortName = info.agent.shortName;
-        msg.agentColor = info.agent.color;
-        msg.isAgentTurn = info.isAgentTurn;
-        msg.roundNumber = info.roundNumber;
-      }
-    } else {
-      msg.role = state.messageIndex % 2 === 0 ? "builder" : "critic";
+    if (info) {
+      msg.agentName = info.agent.name;
+      msg.agentShortName = info.agent.shortName;
+      msg.agentColor = info.agent.color;
+      msg.isAgentTurn = info.isAgentTurn;
+      msg.roundNumber = info.roundNumber;
     }
 
     return msg;
@@ -671,10 +571,6 @@ You decide what will be the best approach — implement the most impactful fix o
     }
 
     if (msg.type === "UPDATE_SETTINGS") {
-      if (typeof msg.builderPrompt === "string")
-        state.builderPrompt = msg.builderPrompt;
-      if (typeof msg.criticPrompt === "string")
-        state.criticPrompt = msg.criticPrompt;
       if (typeof msg.challengeEnabled === "boolean")
         state.challengeEnabled = msg.challengeEnabled;
       if (typeof msg.delay === "number") state.delay = msg.delay;
@@ -688,7 +584,6 @@ You decide what will be the best approach — implement the most impactful fix o
       statusMsg.messageIndex = state.messageIndex;
       statusMsg.hasTextarea = !!findChatInput();
       statusMsg.hasSendButton = !!getActionButton();
-      statusMsg.multiAgentEnabled = state.multiAgentEnabled;
       statusMsg.activeRosterIds = state.activeRosterIds;
       sendResponse(statusMsg);
     }
@@ -702,16 +597,6 @@ You decide what will be the best approach — implement the most impactful fix o
       state.messagesSent = 0;
       state.messageIndex = 0;
       saveState();
-      sendResponse({ ok: true });
-    }
-
-    if (msg.type === "UPDATE_MODE") {
-      state.multiAgentEnabled = !!msg.multiAgentEnabled;
-      if (!state.activeRoster.length) {
-        state.activeRoster = resolveRoster(state.activeRosterIds);
-      }
-      saveState();
-      log(`Mode switched to: ${state.multiAgentEnabled ? "Multi-Agent" : "Classic"}`);
       sendResponse({ ok: true });
     }
 

@@ -1,42 +1,3 @@
-const DEFAULT_BUILDER_PROMPT = `You are the Builder AI responsible for evolving this project.
-Your goal is to improve the product through iterative experimentation.
-Aim for a premium SaaS quality level similar to products like Linear, Vercel, or Stripe.
-
-You may improve: UI design, UX flows, interaction design, performance, architecture, useful features.
-
-GUIDELINES
-- You are encouraged to explore new ideas.
-- Improvements may be incremental or bold.
-- Avoid unnecessary full rewrites.
-- Keep the application functional.
-- Focus on changes that meaningfully improve the product.
-
-PROCESS
-1. ANALYZE the current project state and identify promising opportunities.
-2. SELECT A DIRECTION — redesign a component, simplify a user flow, improve responsiveness, improve performance, introduce a helpful feature, or simplify architecture.
-3. IMPLEMENT the improvement in the code.
-4. STABILIZE — ensure the application still runs correctly and fix issues introduced.
-5. REPORT — briefly explain what was changed, why it improves the product, and potential next directions.
-
-LIMITS
-- Do not modify more than ~30% of the codebase in one iteration.
-- Avoid introducing large new dependencies.
-- Preserve core functionality.`;
-
-const DEFAULT_CRITIC_PROMPT = `You are the Critic AI reviewing the current state of this project.
-Your role is to evaluate the quality of the product and guide further improvements.
-
-Analyze the project from these perspectives: UI design quality, UX clarity, performance, architecture, code maintainability, accessibility, responsiveness.
-
-TASKS
-1. Identify the 5 most important problems or weaknesses in the current implementation.
-2. Suggest concrete improvements that would meaningfully improve the product.
-3. Identify regressions, unnecessary complexity, design inconsistencies, and performance issues.
-4. Propose the 3 most impactful directions the Builder AI should explore next.
-
-Be honest and critical. The goal is to improve the project quality.
-You decide what will be the best approach — implement the most impactful fix or improvement you identified.`;
-
 const $ = (sel) => document.querySelector(sel);
 
 const enableToggle = $("#enableToggle");
@@ -48,68 +9,14 @@ const loopNumber = $("#loopNumber");
 const nextRole = $("#nextRole");
 const delaySlider = $("#delaySlider");
 const delayValue = $("#delayValue");
-const builderArea = $("#builderArea");
-const criticArea = $("#criticArea");
 const challengeToggle = $("#challengeToggle");
-const saveBtn = $("#saveBtn");
 const sendNowBtn = $("#sendNowBtn");
 const resetBtn = $("#resetBtn");
-const classicPanel = $("#classicPanel");
-const multiAgentPanel = $("#multiAgentPanel");
 const agentRoster = $("#agentRoster");
-const roundStat = $("#roundStat");
 const roundNumber = $("#roundNumber");
 
-let currentMode = "classic"; // "classic" or "multi-agent"
 let rosterOrder = []; // current roster IDs in order
 let activeTabId = null; // track which tab the popup is talking to
-
-// ── Tab switching (classic mode Builder/Critic) ──
-
-document.querySelectorAll(".tab").forEach((tab) => {
-  tab.addEventListener("click", () => {
-    document.querySelectorAll(".tab").forEach((t) => t.classList.remove("active"));
-    tab.classList.add("active");
-    const target = tab.dataset.tab;
-    builderArea.style.display = target === "builder" ? "" : "none";
-    criticArea.style.display = target === "critic" ? "" : "none";
-  });
-});
-
-// ── Mode switching ──
-
-document.querySelectorAll(".mode-tab").forEach((tab) => {
-  tab.addEventListener("click", () => {
-    document.querySelectorAll(".mode-tab").forEach((t) => t.classList.remove("active"));
-    tab.classList.add("active");
-    const mode = tab.dataset.mode;
-    setMode(mode);
-  });
-});
-
-function setMode(mode) {
-  currentMode = mode;
-  const isMultiAgent = mode === "multi-agent";
-
-  classicPanel.style.display = isMultiAgent ? "none" : "";
-  multiAgentPanel.style.display = isMultiAgent ? "" : "none";
-  roundStat.style.display = isMultiAgent ? "" : "none";
-  saveBtn.style.display = isMultiAgent ? "none" : "";
-
-  // Update challenge label text
-  const challengeLabel = document.querySelector(".challenge-label");
-  if (challengeLabel) {
-    challengeLabel.textContent = isMultiAgent
-      ? "Inject challenge every 3 rounds"
-      : "Inject challenge every 5 loops";
-  }
-
-  // Notify content script
-  sendToContentScript({ type: "UPDATE_MODE", multiAgentEnabled: isMultiAgent });
-
-  // Persist mode
-  chrome.storage.local.set({ multiAgentEnabled: isMultiAgent });
-}
 
 // ── Agent Roster Rendering ──
 
@@ -119,7 +26,6 @@ function renderRoster(activeIds) {
     return;
   }
 
-  // Use activeIds to determine order and which are checked
   const allAgents = LOVABLE_AGENTS.roster;
   const defaultIds = LOVABLE_AGENTS.defaultRosterOrder;
   const orderedIds = activeIds || defaultIds;
@@ -140,7 +46,7 @@ function renderRoster(activeIds) {
 
   agentRoster.innerHTML = orderedAgents
     .map(
-      (agent, idx) => `
+      (agent) => `
     <div class="agent-card ${agent.active ? "active" : ""}" data-id="${agent.id}">
       <input type="checkbox" class="agent-check" data-id="${agent.id}" ${agent.active ? "checked" : ""}>
       <span class="agent-dot" style="background:${agent.color}"></span>
@@ -209,17 +115,8 @@ function reorderAgent(id, dir) {
 // ── Load settings from storage ──
 
 chrome.storage.local.get(
-  ["builderPrompt", "criticPrompt", "challengeEnabled", "delay", "multiAgentEnabled", "activeRosterIds"],
+  ["challengeEnabled", "delay", "activeRosterIds"],
   (data) => {
-    builderArea.value =
-      typeof data.builderPrompt === "string"
-        ? data.builderPrompt
-        : DEFAULT_BUILDER_PROMPT;
-    criticArea.value =
-      typeof data.criticPrompt === "string"
-        ? data.criticPrompt
-        : DEFAULT_CRITIC_PROMPT;
-
     challengeToggle.checked =
       typeof data.challengeEnabled === "boolean"
         ? data.challengeEnabled
@@ -227,28 +124,6 @@ chrome.storage.local.get(
 
     delaySlider.value = data.delay || 5;
     delayValue.textContent = `${delaySlider.value}s`;
-
-    // Multi-agent mode
-    const isMultiAgent = data.multiAgentEnabled === true;
-    currentMode = isMultiAgent ? "multi-agent" : "classic";
-
-    // Set active mode tab
-    document.querySelectorAll(".mode-tab").forEach((t) => {
-      t.classList.toggle("active", t.dataset.mode === currentMode);
-    });
-
-    classicPanel.style.display = isMultiAgent ? "none" : "";
-    multiAgentPanel.style.display = isMultiAgent ? "" : "none";
-    roundStat.style.display = isMultiAgent ? "" : "none";
-    saveBtn.style.display = isMultiAgent ? "none" : "";
-
-    // Update challenge label
-    const challengeLabel = document.querySelector(".challenge-label");
-    if (challengeLabel) {
-      challengeLabel.textContent = isMultiAgent
-        ? "Inject challenge every 3 rounds"
-        : "Inject challenge every 5 loops";
-    }
 
     // Parse and render roster
     let activeIds = null;
@@ -292,25 +167,6 @@ challengeToggle.addEventListener("change", () => {
   });
 });
 
-// ── Save prompts (classic mode) ──
-
-saveBtn.addEventListener("click", () => {
-  const builder = builderArea.value.trim() || DEFAULT_BUILDER_PROMPT;
-  const critic = criticArea.value.trim() || DEFAULT_CRITIC_PROMPT;
-
-  builderArea.value = builder;
-  criticArea.value = critic;
-
-  sendToContentScript({
-    type: "UPDATE_SETTINGS",
-    builderPrompt: builder,
-    criticPrompt: critic,
-    challengeEnabled: challengeToggle.checked,
-  });
-  saveBtn.textContent = "Saved!";
-  setTimeout(() => (saveBtn.textContent = "Save Prompts"), 1500);
-});
-
 // ── Send now ──
 
 sendNowBtn.addEventListener("click", () => {
@@ -324,14 +180,9 @@ resetBtn.addEventListener("click", () => {
   messagesSent.textContent = "0";
   loopNumber.textContent = "1";
   roundNumber.textContent = "1";
-  if (currentMode === "multi-agent") {
-    const info = getFirstAgentDisplay();
-    nextRole.textContent = info.shortName;
-    nextRole.style.color = info.color;
-  } else {
-    nextRole.textContent = "B";
-    nextRole.style.color = "#30d030";
-  }
+  const info = getFirstAgentDisplay();
+  nextRole.textContent = info.shortName;
+  nextRole.style.color = info.color;
 });
 
 function getFirstAgentDisplay() {
@@ -351,24 +202,16 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
     updateStatusUI(msg.status);
     messagesSent.textContent = msg.messagesSent || 0;
 
-    if (msg.agentMode === "multi-agent") {
-      // Multi-agent mode display
-      if (msg.isAgentTurn && msg.agentShortName) {
-        nextRole.textContent = msg.agentShortName;
-        nextRole.style.color = msg.agentColor || "#6c5ce7";
-      } else {
-        nextRole.textContent = "C";
-        nextRole.style.color = "#ff6b6b";
-      }
-      if (msg.roundNumber) {
-        roundNumber.textContent = msg.roundNumber;
-      }
+    if (msg.isAgentTurn && msg.agentShortName) {
+      nextRole.textContent = msg.agentShortName;
+      nextRole.style.color = msg.agentColor || "#6c5ce7";
     } else {
-      // Classic mode display
-      if (msg.role) {
-        nextRole.textContent = msg.role === "builder" ? "B" : "C";
-        nextRole.style.color = msg.role === "builder" ? "#30d030" : "#ff6b6b";
-      }
+      nextRole.textContent = "C";
+      nextRole.style.color = "#ff6b6b";
+    }
+
+    if (msg.roundNumber) {
+      roundNumber.textContent = msg.roundNumber;
     }
 
     if (msg.loopNumber) {
@@ -391,7 +234,6 @@ function updateStatusUI(status) {
 function refreshStatus() {
   sendToContentScript({ type: "GET_STATUS" }, (response) => {
     if (!response) {
-      // Not on a Lovable page
       updateStatusUI("paused");
       enableToggle.checked = false;
       toggleLabel.textContent = "OFF";
@@ -403,23 +245,16 @@ function refreshStatus() {
     enableToggle.checked = response.enabled || false;
     toggleLabel.textContent = response.enabled ? "ON" : "OFF";
 
-    if (response.agentMode === "multi-agent") {
-      if (response.isAgentTurn && response.agentShortName) {
-        nextRole.textContent = response.agentShortName;
-        nextRole.style.color = response.agentColor || "#6c5ce7";
-      } else {
-        nextRole.textContent = "C";
-        nextRole.style.color = "#ff6b6b";
-      }
-      if (response.roundNumber) {
-        roundNumber.textContent = response.roundNumber;
-      }
+    if (response.isAgentTurn && response.agentShortName) {
+      nextRole.textContent = response.agentShortName;
+      nextRole.style.color = response.agentColor || "#6c5ce7";
     } else {
-      if (response.role) {
-        nextRole.textContent = response.role === "builder" ? "B" : "C";
-        nextRole.style.color =
-          response.role === "builder" ? "#30d030" : "#ff6b6b";
-      }
+      nextRole.textContent = "C";
+      nextRole.style.color = "#ff6b6b";
+    }
+
+    if (response.roundNumber) {
+      roundNumber.textContent = response.roundNumber;
     }
 
     if (response.loopNumber) {

@@ -171,61 +171,6 @@ input[type="range"] {
   min-width: 30px;
 }
 
-/* Tabs */
-.tabs {
-  display: flex;
-  gap: 2px;
-  margin-bottom: 6px;
-}
-
-.tab {
-  flex: 1;
-  padding: 6px 12px;
-  border: none;
-  border-radius: 6px 6px 0 0;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  background: #2a2a4a;
-  color: #888;
-  transition: all 0.2s;
-}
-
-.tab:hover {
-  color: #e0e0e0;
-}
-
-.tab.active {
-  background: #16213e;
-  color: #fff;
-}
-
-.tab.active[data-tab="builder"] {
-  border-top: 2px solid #30d030;
-}
-
-.tab.active[data-tab="critic"] {
-  border-top: 2px solid #ff6b6b;
-}
-
-textarea.prompt-area {
-  width: 100%;
-  background: #16213e;
-  border: 1px solid #2a2a4a;
-  border-radius: 0 0 6px 6px;
-  color: #e0e0e0;
-  padding: 8px;
-  font-size: 11px;
-  font-family: inherit;
-  resize: vertical;
-  line-height: 1.5;
-}
-
-textarea.prompt-area:focus {
-  outline: none;
-  border-color: #6c5ce7;
-}
-
 /* Challenge toggle */
 .challenge-row {
   display: flex;
@@ -276,37 +221,6 @@ textarea.prompt-area:focus {
 
 .btn.danger { color: #ff6b6b; }
 .btn.danger:hover { background: #3a2020; }
-
-/* Mode Tabs */
-.mode-tabs {
-  display: flex;
-  gap: 2px;
-  background: #2a2a4a;
-  border-radius: 8px;
-  padding: 2px;
-}
-
-.mode-tab {
-  flex: 1;
-  padding: 6px 12px;
-  border: none;
-  border-radius: 6px;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  background: transparent;
-  color: #888;
-  transition: all 0.2s;
-}
-
-.mode-tab:hover {
-  color: #e0e0e0;
-}
-
-.mode-tab.active {
-  background: #6c5ce7;
-  color: #fff;
-}
 
 /* Agent Roster */
 .agent-roster {
