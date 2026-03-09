@@ -335,6 +335,16 @@
         btn.click();
         return true;
       }
+
+      if (text === "Dismiss") {
+        const modal = btn.closest('[role="dialog"]') || btn.closest('[role="alertdialog"]') || btn.closest("dialog");
+        const parentText = modal?.innerText || btn.closest("div")?.parentElement?.innerText || "";
+        if (parentText.includes("internal error") || parentText.includes("Error")) {
+          log('Auto-clicking "Dismiss" on internal error dialog');
+          btn.click();
+          return true;
+        }
+      }
     }
     return false;
   }
