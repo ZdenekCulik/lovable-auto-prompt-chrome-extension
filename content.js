@@ -309,9 +309,48 @@
     }, 800);
   }
 
-  // ── Auto-dismiss dialogs ──
+  // ── Auto-dismiss dialogs & error banners ──
+  // Returns: false (nothing found), "dialog" (modal dismissed), "api_error" (API failure banner closed/retried)
 
   function dismissDialogs() {
+    // 1. Check for top-of-page error banner ("Chat requests are failing...")
+    //    These are typically toast/banner elements with close (X) buttons
+    const banners = document.querySelectorAll('[role="alert"], [role="status"], [class*="toast" i], [class*="banner" i], [class*="notification" i]');
+    for (const banner of banners) {
+      if (!isVisible(banner)) continue;
+      const bannerText = banner.innerText || "";
+      if (bannerText.includes("Chat requests are failing") || bannerText.includes("requests are failing")) {
+        // Find the X / close button inside the banner
+        const closeBtn = banner.querySelector('button[aria-label="Close"]')
+          || banner.querySelector('button[aria-label="Dismiss"]')
+          || banner.querySelector("button svg")?.closest("button");
+        if (closeBtn) {
+          log('Auto-closing "Chat requests are failing" banner');
+          closeBtn.click();
+          return "api_error";
+        }
+      }
+    }
+
+    // Also scan for the banner by text content if no ARIA role found
+    const allElements = document.querySelectorAll("div, section, aside");
+    for (const el of allElements) {
+      if (!isVisible(el)) continue;
+      const rect = el.getBoundingClientRect();
+      // Banner is typically at the top of the page, narrow height
+      if (rect.height > 80 || rect.top > 150) continue;
+      const elText = el.textContent || "";
+      if (elText.includes("Chat requests are failing") || elText.includes("requests are failing")) {
+        const closeBtn = el.querySelector("button");
+        if (closeBtn) {
+          log('Auto-closing API error banner (fallback scan)');
+          closeBtn.click();
+          return "api_error";
+        }
+      }
+    }
+
+    // 2. Check for button-based dialogs
     const buttons = document.querySelectorAll("button");
     for (const btn of buttons) {
       const text = btn.textContent?.trim();
@@ -326,14 +365,14 @@
         ) {
           log('Auto-clicking "Allow" on Enable Cloud dialog');
           btn.click();
-          return true;
+          return "dialog";
         }
       }
 
       if (text === "Approve") {
         log('Auto-clicking "Approve" on Plan dialog');
         btn.click();
-        return true;
+        return "dialog";
       }
 
       if (text === "Dismiss") {
@@ -342,18 +381,18 @@
         if (parentText.includes("internal error") || parentText.includes("Error")) {
           log('Auto-clicking "Dismiss" on internal error dialog');
           btn.click();
-          return true;
+          return "dialog";
         }
       }
 
-      // Inline chat error alert with "Retry" button (orange banner)
+      // Inline chat error alert with "Retry" button (orange banner in chat)
       if (text === "Retry") {
         const container = btn.closest("div")?.parentElement || btn.parentElement;
         const containerText = container?.innerText || "";
         if (containerText.includes("internal error") || containerText.includes("error occurred")) {
           log('Auto-clicking "Retry" on inline chat error alert');
           btn.click();
-          return true;
+          return "api_error";
         }
       }
     }
@@ -387,7 +426,18 @@
       return;
     }
 
-    dismissDialogs();
+    const dialogResult = dismissDialogs();
+
+    // If an API error was detected and dismissed, retry sooner (30s)
+    if (dialogResult === "api_error") {
+      log("API error detected — will retry in 30s...");
+      buttonWasStop = false;
+      pendingTimeout = setTimeout(() => {
+        pendingTimeout = null;
+        sendNextMessage();
+      }, 30000);
+      return;
+    }
 
     const btnState = getButtonState();
     const aiWorking = isAIWorking();
