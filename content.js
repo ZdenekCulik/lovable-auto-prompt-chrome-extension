@@ -345,6 +345,17 @@
           return true;
         }
       }
+
+      // Inline chat error alert with "Retry" button (orange banner)
+      if (text === "Retry") {
+        const container = btn.closest("div")?.parentElement || btn.parentElement;
+        const containerText = container?.innerText || "";
+        if (containerText.includes("internal error") || containerText.includes("error occurred")) {
+          log('Auto-clicking "Retry" on inline chat error alert');
+          btn.click();
+          return true;
+        }
+      }
     }
     return false;
   }
