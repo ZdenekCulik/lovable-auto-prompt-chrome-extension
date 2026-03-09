@@ -5,7 +5,8 @@
   const CHALLENGE_PROMPT = `\n\nADDITIONAL CHALLENGE: Challenge the current product concept. If a fundamentally better product structure exists, propose it and explain why. Think beyond incremental improvements.`;
 
   const DEFAULT_DELAY = 5;
-  const MIN_AI_WORK_TIME = 10000;
+  const MIN_AI_WORK_TIME = 30000;       // Wait at least 30s after last send before next
+  const GRACE_PERIOD_AFTER_SEND = 30000; // Don't even check for completion within 30s
   const CHALLENGE_EVERY_N_ROUNDS = 3;
 
   const SEND_ARROW_PREFIX = "M11 19V7";
@@ -60,7 +61,7 @@
   let buttonWasStop = false;
   let lastStopSeenTime = 0;
   let sendingStartTime = 0;
-  const STUCK_FALLBACK_TIME = 15000;
+  const STUCK_FALLBACK_TIME = 180000; // 3 minutes — agent prompts take time
   const SENDING_STUCK_TIME = 10000;
 
   // ── Lovable-specific selectors ──
@@ -118,6 +119,13 @@
         const rect = el.getBoundingClientRect();
         if (rect.y > 100) return true;
       }
+    }
+    // Check for Lovable streaming/thinking indicators
+    const streamingIndicators = document.querySelectorAll(
+      '[class*="streaming" i], [class*="typing" i], [class*="thinking" i], [data-streaming="true"]'
+    );
+    for (const el of streamingIndicators) {
+      if (isVisible(el)) return true;
     }
     return false;
   }
@@ -186,6 +194,18 @@
 
   function sendNextMessage() {
     if (!state.enabled) return;
+
+    // Prevent sending too fast — enforce grace period
+    const timeSinceLastSend = Date.now() - lastSendTime;
+    if (lastSendTime > 0 && timeSinceLastSend < GRACE_PERIOD_AFTER_SEND) {
+      const waitMs = GRACE_PERIOD_AFTER_SEND - timeSinceLastSend;
+      log(`Too soon to send (${Math.round(timeSinceLastSend / 1000)}s since last). Deferring ${Math.round(waitMs / 1000)}s...`);
+      pendingTimeout = setTimeout(() => {
+        pendingTimeout = null;
+        sendNextMessage();
+      }, waitMs);
+      return;
+    }
 
     if (isAIWorking() || getButtonState() === "stop") {
       log("AI is still working (stop icon). Back to waiting...");
@@ -349,14 +369,20 @@
     dismissDialogs();
 
     const btnState = getButtonState();
+    const aiWorking = isAIWorking();
     const timeSinceLastSend = Date.now() - lastSendTime;
 
-    if (btnState === "stop") {
+    // Always track stop/working state (even during grace period)
+    if (btnState === "stop" || aiWorking) {
       buttonWasStop = true;
       lastStopSeenTime = Date.now();
       return;
     }
 
+    // Grace period: don't schedule any sends within grace period after last send
+    if (timeSinceLastSend < GRACE_PERIOD_AFTER_SEND) return;
+
+    // Normal completion: we saw stop icon → now it's gone → enough time passed
     if (buttonWasStop && timeSinceLastSend > MIN_AI_WORK_TIME) {
       log(
         `AI finished! (stop icon gone after ${Math.round(timeSinceLastSend / 1000)}s). Sending next in ${state.delay}s...`
@@ -369,6 +395,7 @@
       return;
     }
 
+    // Fallback: very long idle with no stop icon ever seen (edge case recovery)
     if (timeSinceLastSend > STUCK_FALLBACK_TIME && btnState === "send") {
       log(
         `Fallback: idle for ${Math.round(timeSinceLastSend / 1000)}s (buttonWasStop=${buttonWasStop}). Sending next in ${state.delay}s...`
