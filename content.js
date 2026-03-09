@@ -396,7 +396,25 @@
         }
       }
     }
+
+    // 3. Check for rate-limit banner ("Lovable is in high demand. Try again in Xs")
+    const allText = document.body.innerText || "";
+    const rateMatch = allText.match(/(?:high demand|Try again in)\s*(\d+)\s*s/i);
+    if (rateMatch) {
+      const waitSec = parseInt(rateMatch[1], 10) || 30;
+      log(`Rate limited — "Try again in ${waitSec}s" detected`);
+      return { type: "rate_limited", waitSec };
+    }
+
     return false;
+  }
+
+  // Check if chat input has unsent text (message typed but not submitted)
+  function hasUnsentMessage() {
+    const input = findChatInput();
+    if (!input) return false;
+    const text = (input.value || input.textContent || "").trim();
+    return text.length > 20; // agent prompts are long; ignore short placeholder text
   }
 
   function checkForCompletion() {
@@ -428,6 +446,25 @@
 
     const dialogResult = dismissDialogs();
 
+    // Rate limited — wait the specified time then retry
+    if (dialogResult && dialogResult.type === "rate_limited") {
+      const waitMs = (dialogResult.waitSec + 5) * 1000; // add 5s buffer
+      log(`Rate limited — will retry in ${dialogResult.waitSec + 5}s...`);
+      pendingTimeout = setTimeout(() => {
+        pendingTimeout = null;
+        // Re-click send if message is still in input, otherwise resend
+        const btn = getActionButton();
+        const btnState = getButtonState();
+        if (hasUnsentMessage() && btn && !btn.disabled && btnState === "send") {
+          log("Rate limit expired — re-clicking send for unsent message");
+          btn.click();
+        } else {
+          sendNextMessage();
+        }
+      }, waitMs);
+      return;
+    }
+
     // If an API error was detected and dismissed, retry sooner (30s)
     if (dialogResult === "api_error") {
       log("API error detected — will retry in 30s...");
@@ -437,6 +474,16 @@
         sendNextMessage();
       }, 30000);
       return;
+    }
+
+    // Recovery: message is typed in input but wasn't sent (click failed or was blocked)
+    if (hasUnsentMessage() && getButtonState() === "send") {
+      const btn = getActionButton();
+      if (btn && !btn.disabled) {
+        log("Unsent message detected in chat input — re-clicking send");
+        btn.click();
+        return;
+      }
     }
 
     const btnState = getButtonState();
